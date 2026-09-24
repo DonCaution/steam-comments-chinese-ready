@@ -1,0 +1,8 @@
+node_modules/
+activity.log
+cycle_state.json
+reciprocal_tracking.json
+steam_user_cache.json
+profile_name_cache.json
+candidates.txt
+*.backup.*

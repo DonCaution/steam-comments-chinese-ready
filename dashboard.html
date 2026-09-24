@@ -1,0 +1,707 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Steam Comment Tool</title><style>
+body{margin:0;background:#192a3d;color:#e7f1ff;font:14px Segoe UI,Arial}.top{padding:18px 5%;background:#1b2b40;color:#55c3ff;font-weight:bold}.status{float:right}.grid{max-width:1350px;margin:22px auto;display:grid;grid-template-columns:360px 1fr;gap:14px}.panel{background:#13243a;border:1px solid #56bdf6;border-radius:8px;margin-bottom:14px}.head,.panelHead{padding:11px 14px;border-bottom:1px solid #3b5973;color:#55c4ff;font-weight:bold}.panelHead{cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;background:#182e46;transition:background 0.15s ease}.panelHead:hover{background:#234364;color:#8ce0ff}.panelHead .arrow{font-size:11px;color:#8ce0ff;transition:transform 0.2s ease}.panelHead.is-closed .arrow{transform:rotate(-90deg)}.panelBody.is-closed{display:none!important}.body{padding:13px}.field,select{width:100%;box-sizing:border-box;margin:4px 0;padding:10px;background:#2d506b;border:1px solid #5681a7;border-radius:4px;color:white}.cols,.stats,.board{display:grid;gap:9px}.cols{grid-template-columns:1fr 1fr}.stats{grid-template-columns:repeat(4,1fr)}.board{grid-template-columns:repeat(3,1fr)}button{border:0;border-radius:4px;padding:10px;background:#315a76;color:white;font-weight:bold;cursor:pointer;margin:3px 0}.blue{background:#29a7f3}.green{background:#557e10}.red{background:#893537}.stat,.tier,.friend{background:#0d1b2c;border:1px solid #385b78;border-radius:5px;padding:11px}.stat b{display:block;color:#5ec9ff;font-size:23px}.stat small,.meta{color:#aabed3}.friends{max-height:600px;overflow:auto}.friend{margin:7px 0}.friendTop{color:#68ccff;font-weight:bold;cursor:pointer;display:flex;justify-content:space-between;align-items:center}.tag{color:#b2c3d5;font-size:11px}.details{display:none;border-top:1px solid #29445e;margin-top:9px;padding-top:8px;line-height:1.55;color:#b7c9dc}.details.open{display:block}.mini{padding:6px 9px;margin-right:6px}.candidate{background:#1b3148;border-left:3px solid #5ecaff;padding:8px;margin:7px 0;font-size:12px}.candidate a{color:#7cd6ff;font-weight:bold;text-decoration:none}.tier h3{margin:0 0 8px}.a h3{color:#ffd56a}.b h3{color:#5ecaff}.c h3{color:#c0cada}.progress{min-height:145px}.progressIcon{font-size:23px;color:#7ce3a0}.bar{height:8px;background:#091625;border-radius:6px;overflow:hidden;margin-top:14px}.fill{height:100%;background:#597f12;width:0%}@media(max-width:900px){.grid{grid-template-columns:1fr;margin:12px}.stats,.board{grid-template-columns:1fr}}
+</style></head><body><div class="top"><span>Steam Comment Tool</span> <a href="/audit" style="color:#7cd6ff;margin-left:20px;text-decoration:none;font-size:13px;background:#203b57;padding:5px 11px;border-radius:4px;border:1px solid #4a77a0">🔍 Friends Audit & Pruning</a> <span id="status" class="status">Checking...</span></div><main class="grid"><aside><section class="panel"><div class="head">Control Panel</div><div class="body"><input id="username" class="field" placeholder="Steam username"><input id="password" class="field" type="password" placeholder="Steam password"><input id="guard" class="field" placeholder="Steam Guard code"><div class="cols"><select id="discovery"><option value="OFF">Discovery: Off</option><option value="ON">Discovery: On</option></select><input id="delay" class="field" value="NOW"></div><select id="targetMode" class="field" onchange="updateConfigSettings()"><option value="BOTH">Target Mode: Profiles & Artworks</option><option value="ARTWORKS_ONLY">Target Mode: Artworks Only 🎨</option><option value="PROFILES_ONLY">Target Mode: Profiles Only 👤</option></select><select id="prioritizeReciprocal" class="field" onchange="updateConfigSettings()"><option value="true">Prioritize Active Returners: ON ⚡</option><option value="false">Prioritize Active Returners: OFF</option></select><select id="enableGreedySkip" class="field" onchange="updateConfigSettings()"><option value="true">Skip Low-Reciprocating (Greedy): ON 🧠</option><option value="false">Skip Low-Reciprocating (Greedy): OFF</option></select><label class="meta"><input id="importHistory" type="checkbox"> Refresh lifetime totals before starting</label><div class="cols" style="margin-top:6px;"><button class="green" onclick="cmd('STARTCYCLE')">▶ Resume / Start Cycle</button><button class="red" onclick="cmd('PAUSECYCLE')">⏸ Pause Cycle</button></div><button class="blue" style="width:100%" onclick="start()">Start script (Login)</button><button class="red" style="width:100%;margin-top:2px;" onclick="call('/api/stop')">Stop script (Exit)</button><div class="cols"><button onclick="cmd('CONTINUE')">Continue</button><button onclick="cmd('SKIP')">Skip target</button><button class="green" onclick="cmd('DISCOVER')">Discover</button><button onclick="cmd('IMPORTHISTORY')">Import history</button></div></div></section><section class="panel"><div class="head">Add profile friend</div><div class="body"><input id="newFriend" class="field" placeholder="Steam profile URL"><button class="green" style="width:100%" onclick="friendAction('add')">Add to friends.txt</button></div></section><section class="panel"><div class="head">Add artwork target</div><div class="body"><input id="newArtwork" class="field" placeholder="Steam artwork URL"><button class="green" style="width:100%" onclick="artworkAction('add')">Add to artworks.txt</button></div></section><section class="panel"><div class="panelHead is-closed" onclick="toggleSpoiler(this,'commentPickerBody')"><span>Comment Selection for Next Cycle</span> <span class="arrow">▼</span></div><div class="body panelBody is-closed" id="commentPickerBody"><div id="commentPicker" class="meta" style="margin-bottom:8px">Loading comments...</div><button class="blue" style="width:100%" onclick="saveCommentSelection()">Save Selection</button></div></section></aside><section><section class="panel"><div class="head">Overview</div><div class="body"><div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))"><div class="stat"><b id="activeFriends">0</b><small>ACTIVE FRIENDS</small></div><div class="stat"><b id="activeArtworks">0</b><small>ACTIVE ARTWORKS</small></div><div class="stat"><b id="finishedFriends" style="color:#7ce3a0">0 / 0</b><small>FINISHED FRIENDS</small></div><div class="stat"><b id="finishedArtworks" style="color:#7ce3a0">0 / 0</b><small>FINISHED ARTWORKS</small></div><div class="stat"><b id="pendingTargets" style="color:#ffd56a">0</b><small>WAITING TARGETS</small></div><div class="stat"><b id="candidates">0</b><small>CANDIDATES</small></div><div class="stat"><b id="tracked">0</b><small>TRACKED OWNERS</small></div><div class="stat"><b id="skippedStat" style="color:#d5a9ff">0</b><small>SKIPPED</small></div><div class="stat"><b id="failedStat" style="color:#ff9698">0</b><small>FAILED COMMENTS</small></div></div></div></section><section class="panel progress" style="min-height: auto;"><div class="head" style="display:flex;justify-content:space-between;align-items:center;"><span>Current progress</span><span id="pTargetBadge" class="tag" style="background:#1b3854;color:#7cd6ff;border:1px solid #385b78;padding:3px 9px;border-radius:4px;font-weight:bold;">Idle</span></div><div class="body"><div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px;"><div class="progressIcon" id="pIcon" style="font-size:24px;line-height:1;margin-top:2px;">●</div><div style="flex:1;"><div style="display:flex;justify-content:space-between;align-items:baseline;"><b id="pTitle" style="font-size:16px;color:#ffffff;">Ready</b><span id="pSubState" style="font-size:12px;color:#7cd6ff;font-weight:bold;"></span></div><div id="pDetail" class="meta" style="margin-top:3px;font-size:13px;line-height:1.4;">Start the script from the control panel.</div></div></div><div id="pActiveInfo" style="background:#091625;border:1px solid #234364;border-radius:6px;padding:12px 14px;margin-top:10px;font-size:13px;line-height:1.6;"><div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:8px 16px;"><div>👤 <b>Current Target:</b> <span id="pTargetName" style="color:#68ccff;font-weight:bold;">--</span></div><div>💬 <b>Comment Progress:</b> <span id="pCommentProgress" style="color:#7ce3a0;font-weight:bold;">0 / 0</span></div><div>⏳ <b>Waiting / Status:</b> <span id="pWaitStatus" style="color:#ffd56a;font-weight:bold;">--</span></div><div>🎯 <b>Overall Progress:</b> <span id="pOverallProgress" style="color:#b7c9dc;font-weight:bold;">0 / 0 targets</span></div></div><div id="pCommentPreviewBox" style="margin-top:10px;padding:10px 12px;background:#13243a;border-left:4px solid #29a7f3;border-radius:4px;display:none;"><div style="color:#8ce0ff;font-weight:bold;font-size:11px;letter-spacing:0.5px;margin-bottom:4px;display:flex;justify-content:space-between;"><span>POSTING COMMENT PREVIEW</span><span id="pCommentLength" style="color:#aabed3;font-weight:normal;"></span></div><div id="pCommentPreviewText" style="font-family:Consolas, 'Courier New', monospace;font-size:12px;color:#e7f1ff;white-space:pre-wrap;word-break:break-word;max-height:90px;overflow:auto;"></div></div></div><div class="bar" style="margin-top:12px;height:9px;"><div id="pBar" class="fill"></div></div></div></section><section class="panel"><div class="panelHead is-closed" onclick="toggleSpoiler(this,'friendListBody')"><span>Friends List (friends.txt)</span> <span class="arrow">▼</span></div><div class="body panelBody is-closed" id="friendListBody"><div id="friendList" class="friends"></div></div></section><section class="panel"><div class="panelHead is-closed" onclick="toggleSpoiler(this,'artworkListBody')"><span>Artworks List (artworks.txt)</span> <span class="arrow">▼</span></div><div class="body panelBody is-closed" id="artworkListBody"><div id="artworkList" class="friends"></div></div></section><section class="panel"><div class="panelHead is-closed" onclick="toggleSpoiler(this,'boardBody')"><span>Candidate priority board</span> <span class="arrow">▼</span></div><div class="body panelBody is-closed" id="boardBody"><div class="board" id="board"></div></div></section></section></main><script>
+let state = {}, progress = { done: 0, total: 0, skipped: 0 };
+const targetStates = new Map();
+let activeTargetKey = null;
+let failedComments = 0;
+let currentProgressFriend = '';
+
+const $ = x => document.getElementById(x);
+const esc = s => String(s).replace(/[&<>]/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[x]));
+let dashboardLanguage = 'en';
+
+const chineseDashboardTerms = [
+  ['Steam Comment Tool', 'Steam 评论工具'], ['Friends Audit & Pruning', '好友审计与清理'],
+  ['Script running', '脚本运行中'], ['Script stopped', '脚本已停止'], ['Checking...', '正在检查……'],
+  ['Control Panel', '控制面板'], ['Overview', '概览'], ['Discovery: Off', '发现：关闭'], ['Discovery: On', '发现：开启'],
+  ['Target Mode: Profiles & Artworks', '目标模式：个人资料与作品'], ['Target Mode: Artworks Only', '目标模式：仅作品'], ['Target Mode: Profiles Only', '目标模式：仅个人资料'],
+  ['Prioritize Active Returners: ON', '优先活跃回评者：开启'], ['Prioritize Active Returners: OFF', '优先活跃回评者：关闭'],
+  ['Skip Low-Reciprocating (Greedy): ON', '跳过低回评目标：开启'], ['Skip Low-Reciprocating (Greedy): OFF', '跳过低回评目标：关闭'],
+  ['Refresh lifetime totals before starting', '启动前刷新历史总数'], ['Resume / Start Cycle', '恢复／开始循环'], ['Pause Cycle', '暂停循环'],
+  ['Start script (Login)', '启动脚本（登录）'], ['Stop script (Exit)', '停止脚本（退出）'], ['Continue', '继续'], ['Skip target', '跳过目标'],
+  ['Skip friend', '跳过好友'], ['Discover', '发现'], ['Import history', '导入历史'], ['Reset comment delay', '重置评论间隔'],
+  ['Add profile friend', '添加个人资料好友'], ['Add to friends.txt', '添加到 friends.txt'], ['Add artwork target', '添加作品目标'], ['Add to artworks.txt', '添加到 artworks.txt'],
+  ['Comment Selection for Next Cycle', '下一轮循环的评论选择'], ['Loading comments...', '正在加载评论……'], ['Save Selection', '保存选择'],
+  ['Current progress', '当前进度'], ['Ready', '就绪'], ['Idle', '空闲'], ['Current Target:', '当前目标：'], ['Comment Progress:', '评论进度：'],
+  ['Waiting / Status:', '等待／状态：'], ['Overall Progress:', '总体进度：'], ['POSTING COMMENT PREVIEW', '正在发布的评论预览'],
+  ['Friends List (friends.txt)', '好友列表（friends.txt）'], ['Artworks List (artworks.txt)', '作品列表（artworks.txt）'], ['Candidate priority board', '候选人优先级面板'],
+  ['ACTIVE FRIENDS', '活跃好友'], ['ACTIVE ARTWORKS', '活跃作品'], ['FINISHED FRIENDS', '已完成好友'], ['FINISHED ARTWORKS', '已完成作品'],
+  ['WAITING TARGETS', '等待目标'], ['CANDIDATES', '候选人'], ['TRACKED OWNERS', '已跟踪所有者'], ['SKIPPED', '已跳过'], ['FAILED COMMENTS', '失败评论'],
+  ['Convert Cached Custom URLs to SteamIDs', '将已缓存的自定义链接转换为 SteamID'], ['Terminal language', '终端语言'],
+  ['Steam username', 'Steam 用户名'], ['Steam password', 'Steam 密码'], ['Steam Guard code', 'Steam Guard 验证码'],
+  ['Steam profile URL', 'Steam 个人资料链接'], ['Steam artwork URL', 'Steam 作品链接'], ['Start the script from the control panel.', '请从控制面板启动脚本。'],
+  ['Comment delay:', '评论间隔：'], ['No profile friends yet.', '尚未添加个人资料好友。'], ['No artworks yet.', '尚未添加作品。'], ['No candidates', '没有候选人'],
+  ['Open Steam profile', '打开 Steam 个人资料'], ['Open Steam artwork', '打开 Steam 作品'], ['Comments limit:', '评论数量：'],
+  ['Owner SteamID:', '所有者 SteamID：'], ['Owner lifetime sent:', '所有者累计已发送：'], ['Owner lifetime received:', '所有者累计已收到：'],
+  ['Available credit:', '可用额度：'], ['Last received comment:', '最后收到评论：'], ['Last sent comment:', '最后发送评论：'], ['Last historical check:', '最后历史检查：'],
+  ['Cancel / disable', '取消／禁用'], ['Re-enable', '重新启用'], ['Delete', '删除'], ['Queue #', '队列 #'], ['Priority ', '优先级 '], ['File #', '文件 #'],
+  ['Recent + high-volume returner', '近期＋高回评者'], ['Recent returner', '近期回评者'], ['High-volume returner', '高回评者'], ['Inactive — no return within ', '不活跃——在以下天数内没有回评：']
+];
+
+function translateDashboardString(value) {
+  if (dashboardLanguage !== 'zh-CN' || !value) return value;
+  let translated = String(value);
+  chineseDashboardTerms.forEach(([english, chinese]) => { translated = translated.split(english).join(chinese); });
+  return translated;
+}
+
+function localizeDashboard() {
+  if (dashboardLanguage !== 'zh-CN') return;
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentElement && !['SCRIPT', 'STYLE'].includes(node.parentElement.tagName)) textNodes.push(node);
+  }
+  textNodes.forEach(node => { node.nodeValue = translateDashboardString(node.nodeValue); });
+  document.querySelectorAll('[placeholder],[title]').forEach(el => {
+    if (el.placeholder) el.placeholder = translateDashboardString(el.placeholder);
+    if (el.title) el.title = translateDashboardString(el.title);
+  });
+}
+
+function toggleSpoiler(headEl, bodyId) {
+  let b = document.getElementById(bodyId);
+  if (!b) return;
+  let c = b.classList.toggle('is-closed');
+  headEl.classList.toggle('is-closed', c);
+}
+
+function key(u) {
+  if (!u) return '';
+  let m = String(u).match(/(?:id\/([^/?#]+)|profiles\/(\d+)|sharedfiles\/filedetails\/\?(?:.*&)?id=(\d+))/i);
+  return m?.[3] ? 'artwork_' + m[3] : (m?.[2] || m?.[1] || u);
+}
+
+function findTargetState(x) {
+  if (!x) return null;
+  const urlStr = typeof x === 'string' ? x.trim() : String(x.url || x.source || '').trim();
+  const stID = typeof x === 'object' ? String(x.steamID || x.ownerSteamID || '').trim() : '';
+  const nameStr = typeof x === 'object' ? String(x.name || x.displayName || '').trim() : '';
+  
+  const directKey = key(urlStr);
+  if (directKey && targetStates.has(directKey)) return targetStates.get(directKey);
+  if (stID && targetStates.has(stID)) return targetStates.get(stID);
+  
+  for (let [k, t] of targetStates.entries()) {
+    if ((t.url && (t.url === urlStr || t.url.includes(urlStr) || urlStr.includes(t.url))) ||
+        (stID && t.steamID === stID) ||
+        (nameStr && t.name === nameStr) ||
+        (k && (k === directKey || k === stID))) {
+      return t;
+    }
+  }
+  return null;
+}
+
+function resolveTargetKey(u, steamID, type) {
+  const urlStr = String(u || '').trim();
+  const artMatch = urlStr.match(/sharedfiles\/filedetails\/\?(?:.*&)?id=(\d+)/i) || urlStr.match(/^artwork_(\d+)$/i);
+  if (artMatch) return 'artwork_' + artMatch[1];
+  if (type === 'ARTWORK') {
+    const m = urlStr.match(/(\d+)/);
+    if (m) return 'artwork_' + m[1];
+  }
+  return key(urlStr);
+}
+
+function name(u, f) {
+  const k = key(u), opts = [state.names?.[k], f, k, u];
+  for (let i = 0; i < opts.length; i++) {
+    if (opts[i] != null) {
+      let s = String(opts[i]).trim();
+      let m = s.match(/^Artwork\s+\d+\s+\(Owner:\s*(.+)\)$/i);
+      if (m) s = m[1].trim();
+      if (s.length > 0) return s;
+    }
+  }
+  return 'Steam Target';
+}
+
+function track(u, id) {
+  try {
+    const d = JSON.parse(state.tracking || '{}');
+    if (id && d[id]) return d[id];
+    return Object.entries(d).find(([k, v]) => {
+      if (id && k === String(id)) return true;
+      if (u && (v.profileURL === u || (v.artworkURLs && v.artworkURLs.includes(u)))) return true;
+      if (u && k && u.includes(k)) return true;
+      return false;
+    })?.[1] || {};
+  } catch {
+    return {};
+  }
+}
+
+function getTargetBadge(x, t) {
+  if (x.disabled) {
+    return '<span class="tag" style="background:#421a1c;color:#ff9698;border:1px solid #732a2e;padding:2px 7px;border-radius:4px;font-weight:bold">✗ Disabled</span>';
+  }
+  let rec = t.totalReturned || t.commentsReceived || 0;
+  let recBadge = rec > 0 ? `<span class="tag" style="background:#153d36;color:#52f6d2;border:1px solid #277969;padding:2px 7px;border-radius:4px;font-weight:bold;margin-right:4px">💬 Received (${rec})</span>` : '';
+
+  const target = findTargetState(x);
+  const status = target ? target.status : 'waiting';
+
+  if (status === 'skipped') {
+    return recBadge + '<span class="tag" style="background:#31263d;color:#d5a9ff;border:1px solid #583d73;padding:2px 7px;border-radius:4px;font-weight:bold">⏭ Skipped</span>';
+  }
+  if (status === 'done' || status === 'finished') {
+    return recBadge + '<span class="tag" style="background:#13331b;color:#7ce3a0;border:1px solid #235c32;padding:2px 7px;border-radius:4px;font-weight:bold">✓ Done</span>';
+  }
+  if (status === 'failed') {
+    return recBadge + '<span class="tag" style="background:#421a1c;color:#ff9698;border:1px solid #732a2e;padding:2px 7px;border-radius:4px;font-weight:bold">✗ Failed</span>';
+  }
+  if (status === 'pending') {
+    let c = target ? target.current : 0;
+    let tot = target ? target.total : 6;
+    return recBadge + `<span class="tag" style="background:#3b320d;color:#ffd768;border:1px solid #756215;padding:2px 7px;border-radius:4px;font-weight:bold">⏳ Pending (${c}/${tot})</span>`;
+  }
+  return recBadge + '<span class="tag" style="background:#1b2d42;color:#9ab5d1;border:1px solid #334e6e;padding:2px 7px;border-radius:4px">ー Waiting</span>';
+}
+
+async function setTargetComments(target, comments) {
+  await call('/api/target/comments', { target, comments });
+}
+
+function updateOverviewFinishedStats() {
+  let f = (state.friends || []).filter(x => !x.disabled);
+  let a = (state.artworks || []).filter(x => !x.disabled);
+
+  let finishedF = f.filter(x => {
+    let t = findTargetState(x);
+    return t && (t.status === 'done' || t.status === 'finished');
+  }).length;
+
+  let finishedA = a.filter(x => {
+    let t = findTargetState(x);
+    return t && (t.status === 'done' || t.status === 'finished');
+  }).length;
+
+  let totalFinished = finishedF + finishedA;
+  progress.done = totalFinished;
+
+  let pending = (f.length + a.length) - totalFinished - (progress.skipped || 0);
+  if (pending < 0) pending = 0;
+
+  if ($('finishedFriends')) $('finishedFriends').textContent = finishedF + ' / ' + f.length;
+  if ($('finishedArtworks')) $('finishedArtworks').textContent = finishedA + ' / ' + a.length;
+  if ($('pendingTargets')) $('pendingTargets').textContent = pending;
+}
+
+function renderFriends() {
+  let f = state.friends || [], cfg = {};
+  try { cfg = JSON.parse(state.config || '{}'); } catch {}
+  let tc = cfg.targetComments || {};
+  $('activeFriends').textContent = f.filter(x => !x.disabled).length;
+  // When enabled, this matches index.js's real reciprocal-priority posting
+  // order. File # is retained only to show the target's original position.
+  let rankedFriends = f.map((x, originalIndex) => ({ x, originalIndex, priority: reciprocalPriority(x, cfg) }));
+  if (cfg.prioritizeReciprocal !== false) {
+    rankedFriends.sort((a, b) => b.priority.group - a.priority.group || b.priority.score - a.priority.score || a.originalIndex - b.originalIndex);
+  }
+  $('friendList').innerHTML = rankedFriends.map(({ x, originalIndex, priority }, i) => {
+    let t = track(x.url, x.steamID);
+    let curLimit = tc[x.url] || tc[x.steamID] || x.customComments || 6;
+    let rxComment = t.lastProcessedIncomingAtReadable || 'None';
+    let txComment = t.lastProcessedOutgoingAtReadable || t.lastOutgoingBatchAtReadable || 'None';
+    let priorityLabel = cfg.prioritizeReciprocal !== false ? ` <span class="tag">Priority ${i + 1} · File #${originalIndex + 1} · ${priority.label}</span>` : ` <span class="tag">Queue #${originalIndex + 1}</span>`;
+    return `<div class="friend"><div class="friendTop" onclick="toggle('df${i}')"><span>${esc(name(x.url, x.name || t.profileName))}${priorityLabel}</span>${getTargetBadge(x, t)}</div><div class="details" id="df${i}"><a href="${esc(x.url)}" target="_blank" style="color:#71d0ff">Open Steam profile</a>${x.steamID ? `<br>Owner SteamID: <b>${esc(x.steamID)}</b>` : ''}<br>Activity priority: <b>${esc(priority.label)}</b><br>Comments limit: <select style="width:auto;padding:3px 7px;margin:4px 0 4px 6px;background:#182e46;border:1px solid #385b78;border-radius:4px;color:#68ccff;font-weight:bold" onchange="setTargetComments('${esc(x.url)}', this.value)"><option value="6" ${curLimit == 6 ? 'selected' : ''}>6 comments (Default 6x6)</option><option value="1" ${curLimit == 1 ? 'selected' : ''}>1 comment (1x1 mode)</option><option value="2" ${curLimit == 2 ? 'selected' : ''}>2 comments</option><option value="3" ${curLimit == 3 ? 'selected' : ''}>3 comments</option><option value="4" ${curLimit == 4 ? 'selected' : ''}>4 comments</option><option value="5" ${curLimit == 5 ? 'selected' : ''}>5 comments</option></select><br>Owner lifetime sent: <b>${t.totalSent || t.commentsSent || 0}</b><br>Owner lifetime received: <b>${t.totalReturned || t.commentsReceived || 0}</b><br>Available credit: <b>${t.availableReciprocal || 0}</b><br>Last received comment: <b>${esc(rxComment)}</b><br>Last sent comment: <b>${esc(txComment)}</b><br>Last historical check: <b>${esc(t.lastHistoricalCheckAtReadable || 'Not checked yet')}</b>${x.disabled && x.reason ? `<br><span style="color:#ff9698;font-weight:bold">Reason: ${esc(x.reason)}</span>` : ''}<br>${x.disabled ? `<button class="mini green" onclick="friendAction('enable','${esc(x.url)}')">Re-enable</button>` : `<button class="mini" onclick="friendAction('disable','${esc(x.url)}')">Cancel / disable</button>`}<button class="mini red" onclick="friendAction('remove','${esc(x.url)}')">Delete</button></div></div>`;
+  }).join('') || '<span class="meta">No profile friends yet.</span>';
+  updateOverviewFinishedStats();
+}
+
+function reciprocalPriority(x, cfg) {
+  let t = track(x.url, x.steamID);
+  if (!t || !Object.keys(t).length) return { group: 0, score: 0, label: 'No return history' };
+  let sent = Number(t.totalSent || t.commentsSent || 0);
+  let received = Number(t.totalReturned || t.commentsReceived || 0);
+  let ratio = sent > 0 ? received / sent : 1;
+  let recentDays = Math.max(1, Number(cfg.activeReturnerRecentDays) || 7);
+  let highReturnCount = Math.max(1, Number(cfg.activeReturnerHighReturnCount) || 6);
+  let lastIncoming = Number(t.lastProcessedIncomingAt || 0);
+  let ageDays = lastIncoming ? Math.max(0, (Date.now() - lastIncoming) / 86400000) : Infinity;
+  let isRecent = ageDays <= recentDays;
+  let isHighVolume = received >= highReturnCount;
+  // A recent return is required for active status. A larger lifetime return
+  // count only boosts someone who has also returned within the recent window.
+  let group = !isRecent ? 0 : isHighVolume ? 3 : 2;
+  let label = group === 3 ? 'Recent + high-volume returner' : group === 2 ? 'Recent returner' : 'Inactive — no return within ' + recentDays + ' days';
+  let recencyScore = isRecent ? Math.round((recentDays - ageDays + 1) * 100) : 0;
+  let score = (group * 100000) + recencyScore + (received * 20) + Math.round(ratio * 100);
+  return { group, score, label };
+}
+
+function renderArtworks() {
+  let a = state.artworks || [], cfg = {};
+  try { cfg = JSON.parse(state.config || '{}'); } catch {}
+  let tc = cfg.targetComments || {};
+  $('activeArtworks').textContent = a.filter(x => !x.disabled).length;
+  $('artworkList').innerHTML = a.map((x, i) => {
+    let t = track(x.url, x.steamID);
+    let curLimit = tc[x.url] || tc[x.steamID] || x.customComments || 6;
+    let rxComment = t.lastProcessedIncomingAtReadable || 'None';
+    let txComment = t.lastProcessedOutgoingAtReadable || t.lastOutgoingBatchAtReadable || 'None';
+    return `<div class="friend"><div class="friendTop" onclick="toggle('da${i}')"><span>${esc(name(x.url, x.name || t.profileName))}</span>${getTargetBadge(x, t)}</div><div class="details" id="da${i}"><a href="${esc(x.url)}" target="_blank" style="color:#71d0ff">Open Steam artwork</a>${x.steamID ? `<br>Owner SteamID: <b>${esc(x.steamID)}</b>` : ''}<br>Comments limit: <select style="width:auto;padding:3px 7px;margin:4px 0 4px 6px;background:#182e46;border:1px solid #385b78;border-radius:4px;color:#68ccff;font-weight:bold" onchange="setTargetComments('${esc(x.url)}', this.value)"><option value="6" ${curLimit == 6 ? 'selected' : ''}>6 comments (Default 6x6)</option><option value="1" ${curLimit == 1 ? 'selected' : ''}>1 comment (1x1 mode)</option><option value="2" ${curLimit == 2 ? 'selected' : ''}>2 comments</option><option value="3" ${curLimit == 3 ? 'selected' : ''}>3 comments</option><option value="4" ${curLimit == 4 ? 'selected' : ''}>4 comments</option><option value="5" ${curLimit == 5 ? 'selected' : ''}>5 comments</option></select><br>Owner lifetime sent: <b>${t.totalSent || t.commentsSent || 0}</b><br>Owner lifetime received: <b>${t.totalReturned || t.commentsReceived || 0}</b><br>Available credit: <b>${t.availableReciprocal || 0}</b><br>Last received comment: <b>${esc(rxComment)}</b><br>Last sent comment: <b>${esc(txComment)}</b><br>Last historical check: <b>${esc(t.lastHistoricalCheckAtReadable || 'Not checked yet')}</b>${x.disabled && x.reason ? `<br><span style="color:#ff9698;font-weight:bold">Reason: ${esc(x.reason)}</span>` : ''}<br>${x.disabled ? `<button class="mini green" onclick="artworkAction('enable','${esc(x.url)}')">Re-enable</button>` : `<button class="mini" onclick="artworkAction('disable','${esc(x.url)}')">Cancel / disable</button>`}<button class="mini red" onclick="artworkAction('remove','${esc(x.url)}')">Delete</button></div></div>`;
+  }).join('') || '<span class="meta">No artworks yet.</span>';
+  updateOverviewFinishedStats();
+}
+
+function renderComments() {
+  let list = state.comments || [], cfg = {};
+  try { cfg = JSON.parse(state.config || '{}'); } catch {}
+  let sel = cfg.selectedCommentIndices || [];
+  if (!list.length) { $('commentPicker').innerHTML = '<span class="meta">No comments found in comments.txt.</span>'; return; }
+  let html = list.map((text, idx) => {
+    let num = idx + 1, checked = sel.includes(num) ? 'checked' : '', preview = esc(text.replace(/\r?\n/g, ' ↵ '));
+    if (preview.length > 40) preview = preview.slice(0, 40) + '...';
+    return `<div style="margin:4px 0"><label style="cursor:pointer"><input type="checkbox" class="commentCheck" value="${num}" ${checked}> <b>#${num}</b>: ${preview}</label></div>`;
+  }).join('');
+  let info = '<b>Mode:</b> ';
+  if (!sel.length) info += 'Random from all comments per target profile.';
+  else if (sel.length === 1) info += `Fixed: Comment #${sel[0]} for all profiles.`;
+  else if (sel.length === 2) info += `Pick 2 Random: Randomly chooses Comment #${sel[0]} or #${sel[1]} per profile, posting the SAME chosen comment for all posts on that profile.`;
+  else info += `Selected (${sel.join(', ')}): Randomly assigns one of these per profile.`;
+  $('commentPicker').innerHTML = html + `<div class="meta" style="margin-top:6px;padding-top:6px;border-top:1px solid #3b5973">${info}</div>`;
+}
+
+async function saveCommentSelection() {
+  let checks = Array.from(document.querySelectorAll('.commentCheck:checked')).map(c => +c.value);
+  await call('/api/comments/select', { indices: checks });
+}
+
+function toggle(id) { $(id).classList.toggle('open'); }
+
+function renderCandidates() {
+  let g = { 'TIER A': [], 'TIER B': [], 'TIER C': [] }, tier = '';
+  (state.candidates || '').split(/\r?\n/).forEach(l => {
+    let h = l.match(/^\[ (TIER [ABC]) \]$/);
+    if (h) tier = h[1];
+    else if (l.startsWith('https') && tier) g[tier].push(l);
+  });
+  $('candidates').textContent = Object.values(g).flat().length;
+  $('board').innerHTML = Object.entries(g).map(([t, a]) => `<div class="tier ${t[5].toLowerCase()}"><h3>${t} · ${a.length}</h3>${a.map(r => {
+    let [u, ...m] = r.split(' - ');
+    return `<div class="candidate"><a href="${u}" target="_blank">${esc(name(u))}</a><div class="meta">${esc(m.join(' - '))}</div></div>`;
+  }).join('') || '<span class="meta">No candidates</span>'}</div>`).join('');
+}
+
+async function updateConfigSettings() {
+  let m = $('targetMode').value;
+  let p = $('prioritizeReciprocal').value === 'true';
+  let g = $('enableGreedySkip').value === 'true';
+  let l = $('language') ? $('language').value : 'en';
+  await call('/api/config', { targetMode: m, language: l, prioritizeReciprocal: p, enableGreedySkip: g });
+}
+const updateTargetMode = updateConfigSettings;
+
+async function refresh() {
+  state = await fetch('/api/state').then(r => r.json());
+  $('status').textContent = state.running ? 'Script running' : 'Script stopped';
+  try {
+    let cfg = JSON.parse(state.config || '{}');
+    if (cfg.targetMode && $('targetMode')) $('targetMode').value = cfg.targetMode;
+    dashboardLanguage = cfg.language === 'zh-CN' ? 'zh-CN' : 'en';
+    if ($('language')) $('language').value = dashboardLanguage;
+    if (cfg.prioritizeReciprocal !== undefined && $('prioritizeReciprocal')) $('prioritizeReciprocal').value = String(cfg.prioritizeReciprocal !== false);
+    if (cfg.enableGreedySkip !== undefined && $('enableGreedySkip')) $('enableGreedySkip').value = String(cfg.enableGreedySkip !== false);
+  } catch {}
+  try { $('tracked').textContent = Object.keys(JSON.parse(state.tracking || '{}')).length; } catch {}
+
+  if (state.cycleState) {
+    try {
+      let cs = typeof state.cycleState === 'string' ? JSON.parse(state.cycleState) : state.cycleState;
+      if (cs) {
+        ['finished', 'skipped', 'failed'].forEach(status => {
+          let mappedStatus = status === 'finished' ? 'done' : status;
+          if (Array.isArray(cs[status])) {
+            cs[status].forEach(url => {
+              let tk = key(url);
+              let t = targetStates.get(tk) || { key: tk, url: url, status: mappedStatus };
+              t.status = mappedStatus;
+              targetStates.set(tk, t);
+            });
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  renderFriends();
+  renderArtworks();
+  renderComments();
+  renderCandidates();
+  updateProgressFriendStats();
+  localizeDashboard();
+}
+
+async function call(url, data = {}) {
+  let r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }), j = await r.json();
+  if (!j.ok) alert(j.error || 'Action failed');
+  refresh();
+}
+
+function start() {
+  call('/api/start', { username: $('username').value, password: $('password').value, guard: $('guard').value, discovery: $('discovery').value === 'ON', importHistory: $('importHistory').checked, delay: $('delay').value });
+}
+
+function cmd(command) { call('/api/command', { command }); }
+function friendAction(action, url) { call('/api/friends', { action, url: url || $('newFriend').value }); $('newFriend').value = ''; }
+function artworkAction(action, url) { call('/api/artworks', { action, url: url || $('newArtwork').value }); $('newArtwork').value = ''; }
+
+function updateProgressFriendStats() {
+  const box = $('pFriendStats');
+  if (!box) return;
+  let currentDelayText = $('currentDelayVal') ? $('currentDelayVal').textContent : '';
+  if (!currentDelayText || currentDelayText === '--') {
+    try {
+      let cfg = JSON.parse(state.config || '{}');
+      currentDelayText = Math.round((Number(cfg.betweenComments) || 30000) / 1000) + 's';
+    } catch {
+      currentDelayText = '30s';
+    }
+  }
+  if (!currentProgressFriend) {
+    box.innerHTML = 'Comment delay: <b id="currentDelayVal">' + esc(currentDelayText) + '</b>';
+    return;
+  }
+  let entry = {};
+  try { entry = Object.values(JSON.parse(state.tracking || '{}')).find(v => v.profileName === currentProgressFriend) || {}; } catch (e) {}
+  const sent = entry.totalSent || entry.commentsSent || 0;
+  const received = entry.totalReturned || entry.commentsReceived || 0;
+  const rx = entry.lastProcessedIncomingAtReadable || 'None';
+  const tx = entry.lastProcessedOutgoingAtReadable || entry.lastOutgoingBatchAtReadable || 'None';
+  const histCheck = entry.lastHistoricalCheckAtReadable || 'Not checked yet';
+  box.innerHTML = 'Stats — lifetime sent: <b>' + sent + '</b> · received: <b>' + received + '</b> · delay: <b id="currentDelayVal">' + esc(currentDelayText) + '</b><br>Last received comment: <b>' + esc(rx) + '</b><br>Last sent comment: <b>' + esc(tx) + '</b><br>Last historical check: <b>' + esc(histCheck) + '</b>';
+}
+
+function findTargetForNameOrUrl(nameOrUrl) {
+  if (!nameOrUrl) return null;
+  const targetKey = resolveTargetKey(nameOrUrl, null, null);
+  if (targetStates.has(targetKey)) return targetStates.get(targetKey);
+  for (let [k, t] of targetStates.entries()) {
+    if (t.name === nameOrUrl || t.url === nameOrUrl || (t.steamID && t.steamID === nameOrUrl)) return t;
+  }
+  return null;
+}
+
+let refreshTimer = null;
+function soonRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(refresh, 800);
+}
+
+let currentTargetName = '';
+let currentTargetNum = 0;
+let currentCommentNum = 0;
+let totalCommentsForTarget = 6;
+let currentWaitStatus = 'Idle';
+let currentCommentPreview = '';
+
+function getRealTargetName(keyOrUrl, fallbackName) {
+  let target = activeTargetKey ? targetStates.get(activeTargetKey) : findTargetForNameOrUrl(keyOrUrl || fallbackName);
+  if (target && target.name && target.name !== 'Steam Target' && !/^\d+$/.test(target.name.trim())) {
+    return target.name.trim();
+  }
+  let resolved = name(keyOrUrl || fallbackName, fallbackName);
+  if (resolved && resolved !== 'Steam Target' && !/^\d+$/.test(resolved.trim())) {
+    return resolved.trim();
+  }
+  if (fallbackName && !/^\d+$/.test(fallbackName.trim())) {
+    return fallbackName.trim();
+  }
+  return fallbackName || 'Steam Target';
+}
+
+function updateProgressPanelUI() {
+  let displayTargetName = currentTargetName ? getRealTargetName(activeTargetKey, currentTargetName) : '--';
+  let totalTargetsCount = progress.total || ((state.friends || []).filter(x => !x.disabled).length + (state.artworks || []).filter(x => !x.disabled).length) || 0;
+
+  if ($('pTargetName')) $('pTargetName').textContent = currentTargetName ? (displayTargetName + (currentTargetNum ? ' (Target #' + currentTargetNum + ')' : '')) : '--';
+  if ($('pCommentProgress')) $('pCommentProgress').textContent = currentCommentNum ? (currentCommentNum + ' / ' + totalCommentsForTarget + ' comments') : ('0 / ' + totalCommentsForTarget + ' comments');
+  if ($('pWaitStatus')) $('pWaitStatus').textContent = currentWaitStatus || 'Idle';
+  if ($('pOverallProgress')) $('pOverallProgress').textContent = (progress.done || 0) + ' / ' + totalTargetsCount + ' targets';
+  if ($('pTargetBadge')) $('pTargetBadge').textContent = currentTargetNum ? ('Target #' + currentTargetNum) : 'Idle';
+
+  if ($('pCommentPreviewBox') && $('pCommentPreviewText')) {
+    if (currentCommentPreview && currentCommentPreview.trim().length > 0) {
+      $('pCommentPreviewBox').style.display = 'block';
+      $('pCommentPreviewText').textContent = currentCommentPreview;
+      if ($('pCommentLength')) $('pCommentLength').textContent = currentCommentPreview.length + ' chars';
+    } else {
+      $('pCommentPreviewBox').style.display = 'none';
+    }
+  }
+}
+
+function processEvent(line) {
+  let m;
+  const plain = String(line).replace(/\x1b\[[0-9;]*m/g, '').replace(/^\[[^\]]+\]\s*/, '').trim();
+
+  let delayMatch;
+  if (delayMatch = line.match(/\[DELAY\] Comment delay reset to (\d+) seconds/i)) {
+    if ($('currentDelayVal')) $('currentDelayVal').textContent = delayMatch[1] + 's';
+  } else if (delayMatch = line.match(/New between-comments delay:\s*(\d+)\s*seconds/i)) {
+    if ($('currentDelayVal')) $('currentDelayVal').textContent = delayMatch[1] + 's';
+  } else if (delayMatch = line.match(/New delay:\s*(\d+)s/i)) {
+    if ($('currentDelayVal')) $('currentDelayVal').textContent = delayMatch[1] + 's';
+  } else if (delayMatch = line.match(/\[STATUS\].*?Delay:\s*(\d+)s/i)) {
+    if ($('currentDelayVal')) $('currentDelayVal').textContent = delayMatch[1] + 's';
+  }
+
+  // 1. Cycle Start
+  if (m = line.match(/Cycle (\d+): loaded (\d+) friend/i)) {
+    targetStates.clear();
+    activeTargetKey = null;
+    progress = { done: 0, total: +m[2], skipped: 0 };
+    failedComments = 0;
+    currentTargetName = '';
+    currentTargetNum = 0;
+    currentCommentNum = 0;
+    currentWaitStatus = 'Starting Cycle ' + m[1];
+    currentCommentPreview = '';
+    if ($('skippedStat')) $('skippedStat').textContent = 0;
+    if ($('failedStat')) $('failedStat').textContent = 0;
+    $('pTitle').textContent = 'Cycle ' + m[1] + ' Started';
+    $('pDetail').textContent = 'Loaded ' + m[2] + ' target(s) for commenting.';
+  }
+
+  // 2. Target Processing Start
+  if (m = line.match(/\[(?:FRIEND|TARGET) (\d+)\] Processing (.+?) \((https?:\/\/.+?)\)/i)) {
+    const targetNum = +m[1];
+    const targetName = m[2];
+    const targetUrl = m[3];
+    const targetKey = resolveTargetKey(targetUrl, null, null);
+
+    let target = targetStates.get(targetKey) || {
+      key: targetKey,
+      url: targetUrl,
+      type: targetUrl.includes('sharedfiles/filedetails') ? 'ARTWORK' : 'PROFILE',
+      steamID: /profiles\/(\d+)/.test(targetUrl) ? targetUrl.match(/profiles\/(\d+)/)[1] : '',
+      name: targetName,
+      current: 0,
+      total: 6,
+      status: 'pending'
+    };
+
+    target.name = targetName || target.name;
+    if (target.status !== 'done' && target.status !== 'skipped') target.status = 'pending';
+    targetStates.set(targetKey, target);
+    activeTargetKey = targetKey;
+
+    currentTargetName = targetName;
+    currentTargetNum = targetNum;
+    currentCommentNum = 0;
+    currentWaitStatus = 'Checking return comments for ' + targetName + '...';
+    currentProgressFriend = targetName;
+    updateProgressFriendStats();
+
+    $('pTitle').textContent = 'Processing Target #' + targetNum + ': ' + targetName;
+    $('pDetail').textContent = 'Checking reciprocity and comments history for ' + targetName + '.';
+  }
+
+  // 3. Posting comment X/Y
+  let postMatch1 = line.match(/\[(?:FRIEND|TARGET)\s*(\d+)\]\s*Posting comment\s*(\d+)\/(\d+)\s*to\s*(.+?)(?:\.\s*Preview:\s*(.+))?$/i);
+  let postMatch2 = !postMatch1 && line.match(/Posting comment\s*(\d+)\/(\d+)\s*to\s*(.+?)(?:\.\s*Preview:\s*(.+))?$/i);
+
+  if (postMatch1 || postMatch2) {
+    const commentNum = postMatch1 ? +postMatch1[2] : +postMatch2[1];
+    const totalNum = postMatch1 ? +postMatch1[3] : +postMatch2[2];
+    const targetName = (postMatch1 ? postMatch1[4] : postMatch2[3]).trim();
+    const previewText = (postMatch1 ? postMatch1[5] : postMatch2[4]) ? (postMatch1 ? postMatch1[5] : postMatch2[4]).trim() : '';
+
+    currentCommentNum = commentNum;
+    totalCommentsForTarget = totalNum;
+    if (targetName) currentTargetName = targetName;
+    if (previewText) currentCommentPreview = previewText;
+
+    let target = activeTargetKey ? targetStates.get(activeTargetKey) : findTargetForNameOrUrl(targetName);
+    if (target) {
+      target.total = totalNum;
+      target.current = Math.max(0, commentNum - 1);
+      if (target.status !== 'done' && target.status !== 'skipped') target.status = 'pending';
+    }
+
+    currentWaitStatus = 'Posting comment ' + commentNum + ' of ' + totalNum + ' to ' + currentTargetName + '...';
+    currentProgressFriend = currentTargetName;
+    updateProgressFriendStats();
+
+    $('pTitle').textContent = 'Posting Comment ' + commentNum + '/' + totalNum + ' to ' + currentTargetName;
+    $('pDetail').textContent = 'Currently posting comment ' + commentNum + ' of ' + totalNum + ' to ' + currentTargetName + '.';
+  }
+
+  // 4. Successfully commented
+  if (plain.includes('Successfully commented')) {
+    let commentMatch = plain.match(/Successfully commented on (.+?)\.\s*Comment:\s*(.+)/i);
+    if (commentMatch) {
+      currentCommentPreview = commentMatch[2].trim();
+    }
+    let target = activeTargetKey ? targetStates.get(activeTargetKey) : null;
+    if (target) {
+      target.current = Math.max(target.current || 0, currentCommentNum);
+      if (target.current >= target.total) {
+        target.current = target.total;
+        target.status = 'done';
+        if (!target._doneCounted) {
+          target._doneCounted = true;
+          progress.done++;
+        }
+      } else {
+        target.status = 'pending';
+      }
+    }
+    const curDelay = $('currentDelayVal') ? $('currentDelayVal').textContent : '8s';
+    const nextCommentNum = currentCommentNum + 1;
+    if (nextCommentNum <= totalCommentsForTarget) {
+      currentWaitStatus = 'Waiting ' + curDelay + ' delay for ' + currentTargetName + ' before comment ' + nextCommentNum + '/' + totalCommentsForTarget + '.';
+      $('pTitle').textContent = 'Comment ' + currentCommentNum + '/' + totalCommentsForTarget + ' posted (Waiting ' + curDelay + ')';
+      $('pDetail').textContent = 'Comment ' + currentCommentNum + ' of ' + totalCommentsForTarget + ' posted to ' + currentTargetName + '. Waiting ' + curDelay + ' delay before posting comment ' + nextCommentNum + '/' + totalCommentsForTarget + '.';
+    } else {
+      currentWaitStatus = 'Finished all ' + totalCommentsForTarget + ' comments for ' + currentTargetName + '. Moving to next target...';
+      $('pTitle').textContent = 'Target Completed: ' + currentTargetName;
+      $('pDetail').textContent = 'Completed all ' + totalCommentsForTarget + ' comments for ' + currentTargetName + '.';
+    }
+  }
+
+  // 5. Explicit Delay Wait line
+  if (m = line.match(/\[(?:FRIEND|TARGET) \d+\] Waiting (\d+s) delay for (.+?) before comment (\d+)\/(\d+)/i)) {
+    const delaySec = m[1];
+    const targetName = m[2];
+    const nextNum = m[3];
+    const totalNum = m[4];
+    currentWaitStatus = 'Waiting ' + delaySec + ' delay for ' + targetName + ' before comment ' + nextNum + '/' + totalNum + '.';
+    $('pTitle').textContent = 'Waiting ' + delaySec + ' delay (' + nextNum + '/' + totalNum + ')';
+    $('pDetail').textContent = 'Waiting ' + delaySec + ' delay for ' + targetName + ' before sending comment ' + nextNum + ' of ' + totalNum + '.';
+  }
+
+  // 6. Target Skipped
+  if (m = line.match(/Skipped (.+)|SKIPPED|Skip requested/i)) {
+    let target = activeTargetKey ? targetStates.get(activeTargetKey) : (m[1] ? findTargetForNameOrUrl(m[1].trim()) : null);
+    if (target && target.status !== 'done') {
+      target.status = 'skipped';
+      if (!target._skippedCounted) {
+        target._skippedCounted = true;
+        progress.skipped++;
+        if ($('skippedStat')) $('skippedStat').textContent = progress.skipped;
+      }
+    }
+    if (line.includes('SKIPPED') || line.includes('Skipped ')) {
+      currentWaitStatus = (currentTargetName || 'Friend') + ' was skipped by user.';
+      $('pTitle').textContent = (currentTargetName || 'Target') + ' Skipped';
+      $('pDetail').textContent = (currentTargetName || 'Target') + ' was skipped. Moving to next target.';
+    }
+  }
+
+  // 7. Target Error / Failed
+  if (m = plain.match(/Error posting comment (\d+)\/(\d+) to (.+?):/i) || plain.match(/Maximum retry limit/i)) {
+    let target = activeTargetKey ? targetStates.get(activeTargetKey) : null;
+    if (target && target.status !== 'done') {
+      target.status = 'failed';
+    }
+    failedComments++;
+    if ($('failedStat')) $('failedStat').textContent = failedComments;
+    if (m && m[1]) {
+      currentWaitStatus = 'Comment ' + m[1] + '/' + m[2] + ' failed for ' + m[3] + ' (Retrying...)';
+      $('pTitle').textContent = 'Comment ' + m[1] + '/' + m[2] + ' Failed';
+      $('pDetail').textContent = 'Steam rejected comment for ' + m[3] + '. Retry logic is handling it.';
+    }
+  }
+
+  // Additional status/progress text updates
+  if (line.includes('[DISCOVERY] Scanning')) {
+    currentWaitStatus = 'Scanning discovery targets for activity...';
+    $('pTitle').textContent = 'Discovering candidates';
+    $('pDetail').textContent = 'Scanning targets for recent activity.';
+  } else if (m = line.match(/retrying.*?attempt (\d+)/i)) {
+    currentWaitStatus = 'Retrying comment for ' + currentTargetName + ' (attempt ' + m[1] + ')...';
+    $('pTitle').textContent = 'Retrying comment · attempt ' + m[1];
+    $('pDetail').textContent = 'Waiting before retrying comment for ' + currentTargetName + '.';
+  } else if (m = line.match(/Rate limited.*Waiting (\d+) seconds.*retrying/i)) {
+    currentWaitStatus = 'Steam rate limited! Waiting ' + m[1] + 's for ' + currentTargetName + ' before retrying...';
+    $('pTitle').textContent = 'Steam Rate Limited (' + m[1] + 's)';
+    $('pDetail').textContent = 'Steam rate limited comments. Waiting ' + m[1] + 's before retrying ' + currentTargetName + '.';
+  } else if (line.includes('[RECIPROCAL] Checking ')) {
+    currentWaitStatus = 'Checking return comments on your profile...';
+    $('pTitle').textContent = 'Checking return comments';
+    $('pDetail').textContent = 'Checking whether ' + currentTargetName + ' commented on your profile.';
+  } else if (m = plain.match(/\[(?:FRIEND|TARGET)\s*\d+\]\s*Finished\s+(.+)$/i) || plain.match(/^Finished\s+(.+)$/i)) {
+    let rawFinishedStr = m[1].trim();
+    let finishedName = rawFinishedStr.replace(/\s*\([^)]+\)/g, '').replace(/\s*\[[^\]]+\]/g, '').trim();
+    let target = activeTargetKey ? targetStates.get(activeTargetKey) : findTargetForNameOrUrl(finishedName);
+    if (target) {
+      target.status = 'done';
+      if (target.total) target.current = target.total;
+    }
+    currentWaitStatus = 'Finished target ' + finishedName + '. Loading next...';
+    $('pTitle').textContent = 'Finished ' + finishedName;
+    $('pDetail').textContent = 'All comments completed for ' + finishedName + '. Moving to next target.';
+  } else if (plain.includes('Press Enter or type CONTINUE')) {
+    currentWaitStatus = 'Waiting for user decision on ' + currentTargetName + ' (Auto-continues in 10s)...';
+    $('pTitle').textContent = 'Waiting for Decision: ' + currentTargetName;
+    $('pDetail').textContent = 'Click Continue or Skip friend. Auto-continues in 10 seconds.';
+  } else if (m = plain.match(/Cycle (\d+) finished\. Reloading friends\.txt and restarting in (\d+) seconds/)) {
+    currentWaitStatus = 'Cycle ' + m[1] + ' complete. Restarting in ' + m[2] + 's...';
+    $('pTitle').textContent = 'Cycle ' + m[1] + ' Complete';
+    $('pDetail').textContent = 'Reloading friends list and starting next cycle in ' + m[2] + ' seconds.';
+    $('pIcon').textContent = '✓';
+  }
+
+  if (line.includes('Saved completed outgoing batch') || line.includes('[RECIPROCAL] New returned:')) {
+    updateProgressFriendStats();
+  }
+
+  if (line.includes('imported ') || line.includes('Historical import complete') || line.includes('Candidate accepted') || line.includes('Candidate already recorded') || line.includes('Saved completed outgoing batch')) {
+    soonRefresh();
+  }
+
+  updateProgressPanelUI();
+  $('pBar').style.width = progress.total ? Math.min(100, Math.max(0, progress.done / progress.total * 100)) + '%' : '0%';
+  renderFriends();
+  renderArtworks();
+  localizeDashboard();
+}
+
+// Single EventSource connection for all event parsing
+const eventsSource = new EventSource('/events');
+eventsSource.onmessage = e => processEvent(JSON.parse(e.data));
+
+
+
+const labelMeta = document.querySelector('label.meta');
+if (labelMeta && labelMeta.lastChild) {
+  labelMeta.lastChild.nodeValue = ' Refresh lifetime totals before starting';
+}
+
+const progressBody = document.querySelector('.progress .body');
+if (progressBody && !$('pFriendStats')) {
+  progressBody.insertAdjacentHTML('beforeend',
+    '<div id="pFriendStats" class="meta" style="margin-top:10px;line-height:1.55"></div>' +
+    '<div style="display:flex;gap:7px;margin-top:7px"><button class="green" style="flex:1" onclick="cmd(\'CONTINUE\')">Continue</button><button class="red" style="flex:1" onclick="cmd(\'SKIP\')">Skip friend</button><button class="blue" style="flex:1" onclick="cmd(\'RESETDELAY\')">Reset comment delay</button></div>');
+}
+
+const prioritySelector = $('prioritizeReciprocal');
+const topBar = document.querySelector('.top');
+const statusLabel = $('status');
+if (topBar && statusLabel && !$('language')) {
+  const languageSelect = document.createElement('select');
+  languageSelect.id = 'language';
+  languageSelect.title = 'Terminal language';
+  languageSelect.innerHTML = '<option value="en">EN · English</option><option value="zh-CN">中文 · 简体中文</option>';
+  Object.assign(languageSelect.style, {
+    width: 'auto', margin: '0 12px 0 auto', padding: '7px 31px 7px 11px',
+    background: '#203b57', border: '1px solid #4a77a0', borderRadius: '7px',
+    color: '#e7f1ff', font: '600 12px Segoe UI,Arial', cursor: 'pointer', boxShadow: '0 2px 8px #09162555'
+  });
+  Object.assign(topBar.style, { display: 'flex', alignItems: 'center', gap: '12px' });
+  Object.assign(statusLabel.style, { float: 'none', fontSize: '12px', color: '#aabed3' });
+  languageSelect.addEventListener('change', async () => { await updateConfigSettings(); window.location.reload(); });
+  topBar.insertBefore(languageSelect, statusLabel);
+}
+if (prioritySelector && !$('normalizeUrlsButton')) {
+  prioritySelector.insertAdjacentHTML('afterend', '<button id="normalizeUrlsButton" style="width:100%;margin:4px 0 7px" onclick="cmd(\'NORMALIZEURLS\')">Convert Cached Custom URLs to SteamIDs</button>');
+}
+
+refresh();
+setInterval(refresh, 8000);
+</script></body></html>

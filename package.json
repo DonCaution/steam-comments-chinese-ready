@@ -1,0 +1,20 @@
+{
+  "name": "doncaution-steam-comments-tool",
+  "version": "1.0.0",
+  "description": "Steam comments management tool by DonCaution",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dashboard": "node dashboard.js"
+  },
+  "author": "DonCaution",
+  "license": "ISC",
+  "dependencies": {
+    "cheerio": "^0.22.0",
+    "colors": "^1.4.0",
+    "request": "^2.88.2",
+    "steam-user": "^5.3.0",
+    "steamcommunity": "^3.50.3",
+    "steamid": "^2.1.0"
+  }
+}
